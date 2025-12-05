@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -e
+
+DOCKER_IMAGE="opencode-sandbox:latest"
+
+# First arg: project dir (defaults to current dir)
+PROJECT_DIR="${1:-$PWD}"
+
+# Single sandbox root in your *host* home
+HOST_SANDBOX_ROOT="$HOME/.opencode-sandbox"
+mkdir -p "$HOST_SANDBOX_ROOT"
+
+# Per-area dirs under the sandbox root on the host
+HOST_CONFIG_DIR="$HOST_SANDBOX_ROOT/config"
+HOST_SHARE_DIR="$HOST_SANDBOX_ROOT/share"
+HOST_STATE_DIR="$HOST_SANDBOX_ROOT/state"
+HOST_CACHE_DIR="$HOST_SANDBOX_ROOT/cache"
+
+# Ensure they exist and are owned by you
+mkdir -p "$HOST_CONFIG_DIR" "$HOST_SHARE_DIR" "$HOST_STATE_DIR" "$HOST_CACHE_DIR"
+
+# Your real opencode.json on the host (for RO overlay)
+HOST_REAL_CONFIG="$HOME/.config/opencode/opencode.json"
+
+MOUNTS=(
+  # Project
+  -v "$PROJECT_DIR:/workspace:rw"
+
+  # OpenCode dirs
+  -v "$HOST_CONFIG_DIR:/home/sandbox/.config/opencode:rw"
+  -v "$HOST_SHARE_DIR:/home/sandbox/.local/share/opencode:rw"
+  -v "$HOST_STATE_DIR:/home/sandbox/.local/state/opencode:rw"
+  -v "$HOST_CACHE_DIR:/home/sandbox/.cache/opencode:rw"
+)
+
+# Only mount opencode.json if it exists on the host
+if [ -f "$HOST_REAL_CONFIG" ]; then
+  MOUNTS+=(
+    -v "$HOST_REAL_CONFIG:/home/sandbox/.config/opencode/opencode.json:ro"
+  )
+fi
+
+docker run --rm -it \
+  --detach-keys="ctrl-q,ctrl-x" \
+  --network host \
+  --user "$(id -u):$(id -g)" \
+  "${MOUNTS[@]}" \
+  -w /workspace \
+  -e HOME="/home/sandbox" \
+  -e TERM="${TERM:-xterm-256color}" \
+  "$DOCKER_IMAGE" "${@:2}"
